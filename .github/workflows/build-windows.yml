@@ -61,13 +61,29 @@ jobs:
           cuda: ${{ github.event.inputs.cuda_version }}
 
       - name: Configure CMake (CUDA sm_86, No Prebuilt UI Download)
-        run: >
-          cmake -B build
-          -DGGML_CUDA=ON
-          -DCMAKE_CUDA_ARCHITECTURES=86
-          -DLLAMA_USE_PREBUILT_UI=OFF
-          -DLLAMA_BUILD_TESTS=OFF
-          -DLLAMA_BUILD_EXAMPLES=OFF
+        shell: pwsh
+        run: |
+          $msvcRoot = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC"
+          $toolsets = @()
+          if (Test-Path $msvcRoot) {
+            $toolsets = Get-ChildItem $msvcRoot -Directory | Sort-Object Name -Descending
+            Write-Host "Installed MSVC toolsets: $($toolsets.Name -join ', ')"
+          }
+
+          $olderToolset = $toolsets | Where-Object { $_.Name -notlike "14.52.*" -and $_.Name -notlike "14.51.*" } | Select-Object -First 1
+          $toolsetArgs = @()
+          if ($olderToolset) {
+            Write-Host "Using older MSVC toolset $($olderToolset.Name) to avoid cudafe++ crash with 14.52"
+            $toolsetArgs += @("-T", "version=$($olderToolset.Name)")
+          }
+
+          cmake -B build @toolsetArgs `
+            -DGGML_CUDA=ON `
+            -DCMAKE_CUDA_ARCHITECTURES=86 `
+            -DLLAMA_USE_PREBUILT_UI=OFF `
+            -DLLAMA_BUILD_TESTS=OFF `
+            -DLLAMA_BUILD_EXAMPLES=OFF
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build Release Binaries
         run: cmake --build build --config Release -j 4
