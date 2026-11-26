@@ -124,9 +124,17 @@ jobs:
             }
           }
 
-          $env:INCLUDE = ($includes | Where-Object { Test-Path $_ }) -join ";"
-          $env:LIB = ($libs | Where-Object { Test-Path $_ }) -join ";"
-          $env:PATH = (($binPaths | Where-Object { Test-Path $_ }) -join ";") + ";" + $env:PATH
+          $includeVal = ($includes | Where-Object { Test-Path $_ }) -join ";"
+          $libVal = ($libs | Where-Object { Test-Path $_ }) -join ";"
+          $pathVal = ($binPaths | Where-Object { Test-Path $_ }) -join ";"
+
+          $env:INCLUDE = $includeVal
+          $env:LIB = $libVal
+          $env:PATH = "$pathVal;$env:PATH"
+
+          "INCLUDE=$includeVal" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "LIB=$libVal" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "$pathVal" | Out-File -FilePath $env:GITHUB_PATH -Append
 
           cmake -G Ninja -B build `
             -DCMAKE_BUILD_TYPE=Release `
@@ -136,12 +144,6 @@ jobs:
             -DLLAMA_USE_PREBUILT_UI=OFF `
             -DLLAMA_BUILD_TESTS=OFF `
             -DLLAMA_BUILD_EXAMPLES=OFF
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Build Release Binaries
-        shell: pwsh
-        run: |
-          cmake --build build --config Release -j 4
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Package Binaries and DLLs
