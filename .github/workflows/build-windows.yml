@@ -69,18 +69,51 @@ jobs:
           $clExe = "$msvcDir\bin\Hostx64\x64\cl.exe"
           $nvccExe = "$env:CUDA_PATH\bin\nvcc.exe"
 
-          # Enter VS developer environment for MSVC 14.44 so Ninja has INCLUDE/LIB paths
-          $devCmd = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\Common7\Tools\VsDevCmd.bat"
-          $envVars = cmd /s /c "`"$devCmd`" -arch=x64 -host_arch=x64 -vcvars_ver=14.44.35207 && set"
-          foreach ($line in $envVars) {
-            if ($line -match '^([^=]+)=(.*)$') {
-              [System.Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
-            }
-          }
-
           if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) {
             choco install ninja -y --no-progress | Out-Null
           }
+
+          # Find latest installed Windows SDK version (ucrt, um, shared)
+          $sdkRoot = "C:\Program Files (x86)\Windows Kits\10"
+          $sdkIncRoot = "$sdkRoot\Include"
+          $sdkLibRoot = "$sdkRoot\Lib"
+          $latestSdkVer = Get-ChildItem $sdkIncRoot -Directory -ErrorAction SilentlyContinue |
+            Sort-Object Name -Descending |
+            Select-Object -First 1 -ExpandProperty Name
+
+          $includes = @(
+            "$msvcDir\include",
+            "$msvcDir\ATLMFC\include"
+          )
+          $libs = @(
+            "$msvcDir\lib\x64",
+            "$msvcDir\ATLMFC\lib\x64"
+          )
+          $binPaths = @(
+            "$msvcDir\bin\Hostx64\x64",
+            "$env:CUDA_PATH\bin"
+          )
+
+          if ($latestSdkVer) {
+            Write-Host "Using Windows SDK: $latestSdkVer"
+            $includes += @(
+              "$sdkIncRoot\$latestSdkVer\ucrt",
+              "$sdkIncRoot\$latestSdkVer\shared",
+              "$sdkIncRoot\$latestSdkVer\um",
+              "$sdkIncRoot\$latestSdkVer\winrt"
+            )
+            $libs += @(
+              "$sdkLibRoot\$latestSdkVer\ucrt\x64",
+              "$sdkLibRoot\$latestSdkVer\um\x64"
+            )
+            if (Test-Path "$sdkRoot\bin\$latestSdkVer\x64") {
+              $binPaths += "$sdkRoot\bin\$latestSdkVer\x64"
+            }
+          }
+
+          $env:INCLUDE = ($includes | Where-Object { Test-Path $_ }) -join ";"
+          $env:LIB = ($libs | Where-Object { Test-Path $_ }) -join ";"
+          $env:PATH = (($binPaths | Where-Object { Test-Path $_ }) -join ";") + ";" + $env:PATH
 
           cmake -G Ninja -B build `
             -DCMAKE_BUILD_TYPE=Release `
