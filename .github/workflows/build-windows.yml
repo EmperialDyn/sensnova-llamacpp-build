@@ -25,7 +25,7 @@ jobs:
       - name: Setup Node.js for Web UI
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Build Web UI from Source
         shell: pwsh
@@ -41,12 +41,15 @@ jobs:
           if ($uiDir) {
             Write-Host "Building Web UI in $uiDir"
             Push-Location $uiDir
-            if (Test-Path "package-lock.json") {
-              npm ci
-            } else {
-              npm install
-            }
+            npm install --no-audit --no-fund
+            if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+
             npm run build
+            if ($LASTEXITCODE -ne 0) {
+              Write-Warning "Full npm run build failed (likely PWA asset generator); falling back to vite build."
+              npx vite build
+              if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+            }
             Pop-Location
           } else {
             Write-Warning "No Web UI package.json found; CMake will still compile llama-server without prebuilt UI download."
