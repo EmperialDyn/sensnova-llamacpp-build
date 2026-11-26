@@ -6,7 +6,7 @@ on:
       branch:
         description: 'Branch or commit in yudhanjaya/llama.cpp'
         required: true
-        default: 'master'
+        default: 'sensenova-mhc-fused'
       cuda_version:
         description: 'CUDA Toolkit version to install on runner'
         required: true
