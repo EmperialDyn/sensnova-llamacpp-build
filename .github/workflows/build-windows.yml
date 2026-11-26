@@ -51,6 +51,25 @@ jobs:
             Write-Warning "No Web UI package.json found; CMake will still compile llama-server without prebuilt UI download."
           }
 
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          choco install vulkan-sdk -y --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $sdkDir = Get-ChildItem "C:\VulkanSDK" -Directory -ErrorAction SilentlyContinue |
+            Sort-Object Name -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+
+          if (-not $sdkDir) {
+            Write-Error "Vulkan SDK directory not found under C:\VulkanSDK after installation."
+            exit 1
+          }
+
+          Write-Host "Installed Vulkan SDK at: $sdkDir"
+          "VULKAN_SDK=$sdkDir" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "$sdkDir\Bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
       - name: Configure CMake (Ninja + MSVC 14.44 + Vulkan)
         shell: pwsh
         run: |
@@ -81,6 +100,12 @@ jobs:
           $binPaths = @(
             "$msvcDir\bin\Hostx64\x64"
           )
+
+          if ($env:VULKAN_SDK) {
+            $includes += "$env:VULKAN_SDK\Include"
+            $libs += "$env:VULKAN_SDK\Lib"
+            $binPaths += "$env:VULKAN_SDK\Bin"
+          }
 
           if ($latestSdkVer) {
             Write-Host "Using Windows SDK: $latestSdkVer"
