@@ -60,24 +60,34 @@ jobs:
         with:
           cuda: ${{ github.event.inputs.cuda_version }}
 
-      - name: Configure CMake (CUDA sm_86, No Prebuilt UI Download)
+      - name: Configure CMake (Ninja + MSVC 14.44 + CUDA sm_86)
         shell: pwsh
         run: |
           if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
 
-          $msvcRoot = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC"
-          $toolsetArgs = @()
-          if (Test-Path $msvcRoot) {
-            $toolsets = Get-ChildItem $msvcRoot -Directory | Sort-Object Name -Descending
-            Write-Host "Installed MSVC toolsets: $($toolsets.Name -join ', ')"
-            $olderToolset = $toolsets | Where-Object { $_.Name -notlike "14.52.*" -and $_.Name -notlike "14.51.*" } | Select-Object -First 1
-            if ($olderToolset) {
-              Write-Host "Trying toolset version $($olderToolset.Name)"
-              $toolsetArgs += @("-T", "version=$($olderToolset.Name)")
+          $msvcDir = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.44.35207"
+          $clExe = "$msvcDir\bin\Hostx64\x64\cl.exe"
+          $nvccExe = "$env:CUDA_PATH\bin\nvcc.exe"
+
+          # Enter VS developer environment for MSVC 14.44 so Ninja has INCLUDE/LIB paths
+          $devCmd = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\Common7\Tools\VsDevCmd.bat"
+          $envVars = cmd /s /c "`"$devCmd`" -arch=x64 -host_arch=x64 -vcvars_ver=14.44.35207 && set"
+          foreach ($line in $envVars) {
+            if ($line -match '^([^=]+)=(.*)$') {
+              [System.Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
             }
           }
 
-          cmake -B build @toolsetArgs `
+          if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) {
+            choco install ninja -y --no-progress | Out-Null
+          }
+
+          cmake -G Ninja -B build `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_C_COMPILER="$clExe" `
+            -DCMAKE_CXX_COMPILER="$clExe" `
+            -DCMAKE_CUDA_COMPILER="$nvccExe" `
+            -DCMAKE_CUDA_HOST_COMPILER="$clExe" `
             -DGGML_CUDA=ON `
             -DCMAKE_CUDA_ARCHITECTURES=86 `
             -DLLAMA_USE_PREBUILT_UI=OFF `
@@ -86,7 +96,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build Release Binaries
-        run: cmake --build build --config Release -j 4
+        shell: pwsh
+        run: |
+          cmake --build build --config Release -j 4
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Package Binaries and DLLs
         shell: pwsh
