@@ -1,4 +1,4 @@
-name: Build SenseNova llama.cpp (Windows RTX 30 CUDA + Web UI)
+name: Build SenseNova llama.cpp (Windows RTX 30 Vulkan + Web UI)
 
 on:
   workflow_dispatch:
@@ -7,13 +7,9 @@ on:
         description: 'Branch or commit in yudhanjaya/llama.cpp'
         required: true
         default: 'sensenova-mhc-fused'
-      cuda_version:
-        description: 'CUDA Toolkit version to install on runner'
-        required: true
-        default: '12.6.3'
 
 jobs:
-  build-windows-cuda:
+  build-windows-vulkan:
     runs-on: windows-latest
     steps:
       - name: Checkout yudhanjaya/llama.cpp
@@ -55,19 +51,13 @@ jobs:
             Write-Warning "No Web UI package.json found; CMake will still compile llama-server without prebuilt UI download."
           }
 
-      - name: Install CUDA Toolkit
-        uses: Jimver/cuda-toolkit@v0.2.36
-        with:
-          cuda: ${{ github.event.inputs.cuda_version }}
-
-      - name: Configure CMake (Ninja + MSVC 14.44 + CUDA sm_86)
+      - name: Configure CMake (Ninja + MSVC 14.44 + Vulkan)
         shell: pwsh
         run: |
           if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
 
           $msvcDir = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.44.35207"
           $clExe = "$msvcDir\bin\Hostx64\x64\cl.exe"
-          $nvccExe = "$env:CUDA_PATH\bin\nvcc.exe"
 
           if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) {
             choco install ninja -y --no-progress | Out-Null
@@ -89,8 +79,7 @@ jobs:
             "$msvcDir\ATLMFC\lib\x64"
           )
           $binPaths = @(
-            "$msvcDir\bin\Hostx64\x64",
-            "$env:CUDA_PATH\bin"
+            "$msvcDir\bin\Hostx64\x64"
           )
 
           if ($latestSdkVer) {
@@ -118,10 +107,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_C_COMPILER="$clExe" `
             -DCMAKE_CXX_COMPILER="$clExe" `
-            -DCMAKE_CUDA_COMPILER="$nvccExe" `
-            -DCMAKE_CUDA_HOST_COMPILER="$clExe" `
-            -DGGML_CUDA=ON `
-            -DCMAKE_CUDA_ARCHITECTURES=86 `
+            -DGGML_VULKAN=ON `
             -DLLAMA_USE_PREBUILT_UI=OFF `
             -DLLAMA_BUILD_TESTS=OFF `
             -DLLAMA_BUILD_EXAMPLES=OFF
@@ -142,15 +128,10 @@ jobs:
             Get-ChildItem "$dir" -Filter "*.exe" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/ -Force
             Get-ChildItem "$dir" -Filter "*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/ -Force
           }
-          if ($env:CUDA_PATH -and (Test-Path "$env:CUDA_PATH\bin")) {
-            Get-ChildItem "$env:CUDA_PATH\bin" -Filter "cudart64_*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/ -Force
-            Get-ChildItem "$env:CUDA_PATH\bin" -Filter "cublas64_*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/ -Force
-            Get-ChildItem "$env:CUDA_PATH\bin" -Filter "cublasLt64_*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/ -Force
-          }
 
-      - name: Upload Windows CUDA Artifact
+      - name: Upload Windows Vulkan Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: llama-sensenova-win64-cuda-rtx30-webui
+          name: llama-sensenova-win64-vulkan-rtx30-webui
           path: dist/
           retention-days: 7
