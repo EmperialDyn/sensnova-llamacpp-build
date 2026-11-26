@@ -63,18 +63,18 @@ jobs:
       - name: Configure CMake (CUDA sm_86, No Prebuilt UI Download)
         shell: pwsh
         run: |
+          if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
+
           $msvcRoot = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC"
-          $toolsets = @()
+          $toolsetArgs = @()
           if (Test-Path $msvcRoot) {
             $toolsets = Get-ChildItem $msvcRoot -Directory | Sort-Object Name -Descending
             Write-Host "Installed MSVC toolsets: $($toolsets.Name -join ', ')"
-          }
-
-          $olderToolset = $toolsets | Where-Object { $_.Name -notlike "14.52.*" -and $_.Name -notlike "14.51.*" } | Select-Object -First 1
-          $toolsetArgs = @()
-          if ($olderToolset) {
-            Write-Host "Using older MSVC toolset $($olderToolset.Name) to avoid cudafe++ crash with 14.52"
-            $toolsetArgs += @("-T", "version=$($olderToolset.Name)")
+            $olderToolset = $toolsets | Where-Object { $_.Name -notlike "14.52.*" -and $_.Name -notlike "14.51.*" } | Select-Object -First 1
+            if ($olderToolset) {
+              Write-Host "Trying toolset version $($olderToolset.Name)"
+              $toolsetArgs += @("-T", "version=$($olderToolset.Name)")
+            }
           }
 
           cmake -B build @toolsetArgs `
