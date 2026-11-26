@@ -150,10 +150,20 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist
-          $binDirs = @("build/bin/Release", "build/bin") | Where-Object { Test-Path $_ }
-          foreach ($dir in $binDirs) {
-            Get-ChildItem "$dir" -Filter "*.exe" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/ -Force
-            Get-ChildItem "$dir" -Filter "*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/ -Force
+
+          $builtExes = Get-ChildItem -Path "build" -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue
+          $builtDlls = Get-ChildItem -Path "build" -Recurse -Filter "*.dll" -ErrorAction SilentlyContinue
+
+          Write-Host "Found $($builtExes.Count) .exe files and $($builtDlls.Count) .dll files under build/"
+          $builtExes | ForEach-Object { Write-Host "EXE: $($_.FullName)" }
+          $builtDlls | ForEach-Object { Write-Host "DLL: $($_.FullName)" }
+
+          $builtExes | Copy-Item -Destination dist/ -Force
+          $builtDlls | Copy-Item -Destination dist/ -Force
+
+          if (-not (Get-ChildItem -Path "dist" -File -ErrorAction SilentlyContinue)) {
+            Write-Error "No binaries were copied into dist/."
+            exit 1
           }
 
       - name: Upload Windows Vulkan Artifact
