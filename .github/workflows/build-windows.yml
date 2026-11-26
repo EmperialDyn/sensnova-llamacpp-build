@@ -1,0 +1,59 @@
+name: Build SenseNova llama.cpp (Windows RTX 30 CUDA)
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch or commit in yudhanjaya/llama.cpp'
+        required: true
+        default: 'master'
+      cuda_version:
+        description: 'CUDA Toolkit version to install on runner'
+        required: true
+        default: '12.6.3'
+
+jobs:
+  build-windows-cuda:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout yudhanjaya/llama.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: yudhanjaya/llama.cpp
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Install CUDA Toolkit
+        uses: Jimver/cuda-toolkit@v0.2.36
+        with:
+          cuda: ${{ github.event.inputs.cuda_version }}
+
+      - name: Configure CMake (CUDA sm_86)
+        run: >
+          cmake -B build
+          -DGGML_CUDA=ON
+          -DCMAKE_CUDA_ARCHITECTURES=86
+          -DLLAMA_USE_PREBUILT_UI=OFF
+          -DLLAMA_BUILD_TESTS=OFF
+          -DLLAMA_BUILD_EXAMPLES=OFF
+
+      - name: Build Release Binaries
+        run: cmake --build build --config Release -j 4
+
+      - name: Package Binaries and DLLs
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item build/bin/Release/*.exe dist/
+          Copy-Item build/bin/Release/*.dll dist/
+          if ($env:CUDA_PATH -and (Test-Path "$env:CUDA_PATH\bin")) {
+            Get-ChildItem "$env:CUDA_PATH\bin" -Filter "cudart64_*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/
+            Get-ChildItem "$env:CUDA_PATH\bin" -Filter "cublas64_*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/
+            Get-ChildItem "$env:CUDA_PATH\bin" -Filter "cublasLt64_*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/
+          }
+
+      - name: Upload Windows CUDA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-sensenova-win64-cuda-rtx30
+          path: dist/
+          retention-days: 7
