@@ -10,7 +10,7 @@ on:
       cuda_version:
         description: 'CUDA Toolkit version to install on runner'
         required: true
-        default: '13.2.0'
+        default: '12.6.3'
 
 jobs:
   build-windows-cuda:
@@ -46,7 +46,7 @@ jobs:
 
             npm run build
             if ($LASTEXITCODE -ne 0) {
-              Write-Warning "Full npm run build failed (likely PWA asset generator); falling back to vite build."
+              Write-Warning "Full npm run build failed; falling back to vite build."
               npx vite build
               if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
             }
@@ -73,7 +73,6 @@ jobs:
             choco install ninja -y --no-progress | Out-Null
           }
 
-          # Find latest installed Windows SDK version (ucrt, um, shared)
           $sdkRoot = "C:\Program Files (x86)\Windows Kits\10"
           $sdkIncRoot = "$sdkRoot\Include"
           $sdkLibRoot = "$sdkRoot\Lib"
@@ -138,12 +137,15 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist
-          Copy-Item build/bin/Release/*.exe dist/
-          Copy-Item build/bin/Release/*.dll dist/
+          $binDirs = @("build/bin/Release", "build/bin") | Where-Object { Test-Path $_ }
+          foreach ($dir in $binDirs) {
+            Get-ChildItem "$dir" -Filter "*.exe" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/ -Force
+            Get-ChildItem "$dir" -Filter "*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/ -Force
+          }
           if ($env:CUDA_PATH -and (Test-Path "$env:CUDA_PATH\bin")) {
-            Get-ChildItem "$env:CUDA_PATH\bin" -Filter "cudart64_*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/
-            Get-ChildItem "$env:CUDA_PATH\bin" -Filter "cublas64_*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/
-            Get-ChildItem "$env:CUDA_PATH\bin" -Filter "cublasLt64_*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/
+            Get-ChildItem "$env:CUDA_PATH\bin" -Filter "cudart64_*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/ -Force
+            Get-ChildItem "$env:CUDA_PATH\bin" -Filter "cublas64_*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/ -Force
+            Get-ChildItem "$env:CUDA_PATH\bin" -Filter "cublasLt64_*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/ -Force
           }
 
       - name: Upload Windows CUDA Artifact
