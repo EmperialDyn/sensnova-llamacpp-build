@@ -1,4 +1,4 @@
-name: Build SenseNova llama.cpp (Windows RTX 30 CUDA)
+name: Build SenseNova llama.cpp (Windows RTX 30 CUDA + Web UI)
 
 on:
   workflow_dispatch:
@@ -22,12 +22,40 @@ jobs:
           repository: yudhanjaya/llama.cpp
           ref: ${{ github.event.inputs.branch }}
 
+      - name: Setup Node.js for Web UI
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Web UI from Source
+        shell: pwsh
+        run: |
+          $uiCandidates = @(
+            "tools/server/webui",
+            "tools/webui"
+          )
+          $uiDir = $uiCandidates | Where-Object { Test-Path (Join-Path $_ "package.json") } | Select-Object -First 1
+
+          if ($uiDir) {
+            Write-Host "Building Web UI in $uiDir"
+            Push-Location $uiDir
+            if (Test-Path "package-lock.json") {
+              npm ci
+            } else {
+              npm install
+            }
+            npm run build
+            Pop-Location
+          } else {
+            Write-Warning "No Web UI package.json found in standard paths; CMake will still compile llama-server without prebuilt UI download."
+          }
+
       - name: Install CUDA Toolkit
         uses: Jimver/cuda-toolkit@v0.2.36
         with:
           cuda: ${{ github.event.inputs.cuda_version }}
 
-      - name: Configure CMake (CUDA sm_86)
+      - name: Configure CMake (CUDA sm_86, No Prebuilt UI Download)
         run: >
           cmake -B build
           -DGGML_CUDA=ON
@@ -54,6 +82,6 @@ jobs:
       - name: Upload Windows CUDA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: llama-sensenova-win64-cuda-rtx30
+          name: llama-sensenova-win64-cuda-rtx30-webui
           path: dist/
           retention-days: 7
